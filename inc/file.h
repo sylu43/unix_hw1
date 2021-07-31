@@ -9,7 +9,7 @@ struct file_info{
     char *user;
     char *fd;
     char *type;
-    u_int64_t node;
+    u_int64_t nodes;
     char *name;
     struct file_info *next;
 };
