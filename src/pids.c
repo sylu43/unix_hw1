@@ -7,17 +7,19 @@
 #include <fcntl.h>
 #include "pids.h"
 
-int getPids(pid_node_t *pids){
+pid_node_t* getPids(){
 
 	DIR *dp;
 	FILE *fp;
     struct dirent *dir;
     char status_file[20], status[128];
 
-    pid_node_t *cur_pid = pids;
+    pid_node_t *pids;
+    pid_node_t *new_pid;
+    pid_node_t *cur_pid;
 
 	if((dp = opendir(PROC_DIR)) == NULL){
-		return -1;
+		return pids;
 	}
 
     passwd();
@@ -37,28 +39,47 @@ int getPids(pid_node_t *pids){
 		}
 
         //if number
-        cur_pid->name = strdup(dir->d_name);
+        new_pid = (pid_node_t*)malloc(sizeof(pid_node_t));
+        new_pid->pid = atoi(dir->d_name);
        
         //check uid
         memset(status_file+6, 0, 20-6);
-        strcpy(status_file+6, cur_pid->name);
+        strcpy(status_file+6, dir->d_name);
         strcat(status_file, "/status");
         fp = fopen(status_file, "r");
         while(fgets(status, 128, fp) != NULL){
             if(!strncmp("Uid:", status, 4)){
-                cur_pid->username = strdup(parseUid(status));
+                new_pid->username = strdup(parseUid(status));
                 break;
             }
         }
         fclose(fp);
-
-        //make next node
-        cur_pid->next = (pid_node_t*)malloc(sizeof(pid_node_t));
-        cur_pid = cur_pid->next;
-        cur_pid->name = NULL;
+        
+        //insert node
+        if(pids == NULL){
+            pids = new_pid;
+        }
+        else{
+            cur_pid = pids;
+            while(cur_pid != NULL){
+                if(new_pid->pid > cur_pid->pid){
+                    if(cur_pid->next == NULL){
+                        cur_pid->next = new_pid;
+                        break;
+                    }
+                    else if(new_pid->pid < cur_pid->next->pid){
+                        new_pid->next = cur_pid->next;
+                        cur_pid->next = new_pid;
+                        break;
+                    }
+                }
+                cur_pid = cur_pid->next;
+            }
+        }
 	}
     closedir(dp);
-	return 0;
+
+	return pids;
 }
 
 char *parseUid(char *line){

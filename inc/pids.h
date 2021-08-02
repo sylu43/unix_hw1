@@ -6,7 +6,7 @@ typedef struct pid_node pid_node_t;
 typedef struct user_node user_node_t;
 static user_node_t *users;
 struct pid_node{
-    char *name;
+    int pid;
     char *username;
     struct pid_node *next;
 };
@@ -15,7 +15,7 @@ struct user_node{
     int uid;
     struct user_node *next;
 };
-int getPids(pid_node_t *pids);
+pid_node_t *getPids();
 char *parseUid(char *line);
 char *getUsername(int uid);
 void passwd(); 
