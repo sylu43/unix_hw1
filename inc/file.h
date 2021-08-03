@@ -14,7 +14,6 @@ struct file_info{
     struct file_info *next;
 };
 int getFiles(pid_node_t *pids, char **args);
-void processFile(pid_node_t *cur_pid, char *path_buf, char *cmd_buff, int fd_t);
+void processFile(pid_node_t *cur_pid, char *path_buff, char *cmd_buff, int fd_t);
 void printInfo(char *command, int pid, char *user, const char *fd, const char *type, int nodes, char *name);
-u_int64_t getNodes(char *path);
 #endif

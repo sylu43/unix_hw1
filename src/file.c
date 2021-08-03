@@ -5,17 +5,18 @@
 #include <string.h>
 #include <regex.h>
 #include <errno.h>
+#include <dirent.h>
 #include "file.h"
 
-#define READ_BUF_SIZE 256
-#define PATH_BUF_SIZE 64
+#define READ_BUFF_SIZE 256
+#define PATH_BUFF_SIZE 64
 
 enum FD_ENUM {
     cwd, root, exe, mem, del, FD
 };
 
 static const char *FD_STRING[] = {
-    "cwd", "root", "exe", "maps", "del", "fd"
+    "cwd", "root", "exe", "mem", "del", "fd"
 };
 
 enum TYPE_ENUM {
@@ -29,138 +30,155 @@ static const char *TYPE_STRING[] = {
 int getFiles(pid_node_t *pids, char **args){
     
     int filename_offset, pid_len;
-    char path_buf[PATH_BUF_SIZE], read_buf[READ_BUF_SIZE];
-    char cmd_buff[READ_BUF_SIZE], user_buff[32], fd_buff[10];
+    char path_buff[PATH_BUFF_SIZE], read_buff[READ_BUFF_SIZE];
+    char cmd_buff[READ_BUFF_SIZE], user_buff[32], fd_buff[10];
     const char *status = "status";
+    const char *maps = "maps";
     FILE *fp;
+    DIR *dp;
+    struct dirent *dir;
+    struct stat st;
+    pid_node_t *cur_pid = pids;
 
+    //regex setup
     regex_t re;
     regmatch_t match[1];
-    pid_node_t *cur_pid = pids;
-    strcpy(path_buf, PROC_DIR);
     if(args[0] != NULL){
         regcomp(&re, args[0], REG_EXTENDED);
     }
 
+    //set path_buff to /proc/
+    strcpy(path_buff, PROC_DIR);
+
     printf("COMMAND\t\t\t\tPID\tUSER\t\t\t\tFD\tTYPE\tNODE\tNAME\n");
     while(cur_pid != NULL){
-        sprintf(path_buf,"%s%d/", path_buf, cur_pid->pid);
-        filename_offset = strlen(path_buf);
+        sprintf(path_buff, "%s%d/", path_buff, cur_pid->pid);
+        filename_offset = strlen(path_buff);
 
         //filter command
-        strcat(path_buf, status);
-        read_buf[0] = '\0';
-        fp = fopen(path_buf, "r");
-        fgets(read_buf, READ_BUF_SIZE, fp);
+        strcat(path_buff, status);
+        read_buff[0] = '\0';
+        fp = fopen(path_buff, "r");
+        fgets(read_buff, READ_BUFF_SIZE, fp);
         fclose(fp);
-        strtok(read_buf, "\t");
+        strtok(read_buff, "\t");
         strcpy(cmd_buff, strtok(NULL, "\n"));
-        fflush(stdout);
         if(args[0] != NULL){
             if(regexec(&re, cmd_buff, 1, match, 0)){
                 cur_pid = cur_pid->next;
-                path_buf[6] = '\0';
+                path_buff[6] = '\0';
                 continue;
             }
         }
 
-        //read command and exe
-        strcpy(path_buf + filename_offset, FD_STRING[exe]);
-        processFile(cur_pid, path_buf, cmd_buff, exe);
-        /*
-        fd_p = FD_STRING[exe];
-        read_buf[0] = '\0';
-        readlink(path_buf, read_buf, READ_BUF_SIZE);
-        if(errno == EACCES){
-            type_p = TYPE_STRING[unknown];
-            nodes = 0;
-            strcpy(name_buff, path_buf);
-            strcat(name_buff, readlink_err);
-        }
-        else{
-            type_p = TYPE_STRING[reg];
-            nodes = getNodes(read_buf);
-            strcpy(name_buff, read_buf);
-        }
-        printInfo(cmd_buff, pid, user_buff, fd_p, type_p, nodes, name_buff);
-        */
-        //nodes = getNodes(read_buf);
-        //exe_name = strdup(strrchr(read_buf, '/') + 1);
-        
-        /* 
         //read cwd
-        strcpy(path_buf + filename_offset, FD_STRING[cwd]);
-        memset(read_buf, '\0', READ_BUF_SIZE);
-        readlink(path_buf, read_buf, READ_BUF_SIZE);
-        nodes = getNodes(read_buf);
-        fillInfo(cur_info, exe_name, atoi(cur_pid->name), cur_pid->username, FD_STRING[cwd], TYPE_STRING[dir], nodes , read_buf);
-        cur_info->next = (file_info_t*)malloc(sizeof(file_info_t));
-        cur_info = cur_info->next;
+        strcpy(path_buff + filename_offset, FD_STRING[cwd]);
+        processFile(cur_pid, path_buff, cmd_buff, cwd);
 
+        //read exe
+        strcpy(path_buff + filename_offset, FD_STRING[exe]);
+        processFile(cur_pid, path_buff, cmd_buff, exe);
+        
         //read root
-        strcpy(path_buf + filename_offset, FD_STRING[root]);
-        memset(read_buf, '\0', READ_BUF_SIZE);
-        readlink(path_buf, read_buf, READ_BUF_SIZE);
-        nodes = getNodes(read_buf);
-        fillInfo(cur_info, exe_name, atoi(cur_pid->name), cur_pid->username, FD_STRING[root], TYPE_STRING[dir], nodes , read_buf);
-        cur_info->next = (file_info_t*)malloc(sizeof(file_info_t));
-        cur_info = cur_info->next;
-
+        strcpy(path_buff + filename_offset, FD_STRING[root]);
+        processFile(cur_pid, path_buff, cmd_buff, root);
+        
         //read mem
+        strcpy(path_buff + filename_offset, "maps");
+        fp = fopen(path_buff, "r");
+        if(fp != NULL){
+            while(fgets(read_buff, READ_BUFF_SIZE, fp) != NULL){
+                if(strchr(read_buff, '/') != NULL){
+                    strcpy(read_buff, strchr(read_buff, '/'));
+                    read_buff[strlen(read_buff) - 1] = '\0';
+                    processFile(cur_pid, read_buff, cmd_buff, strstr(read_buff, "(deleted)") ? del : mem);
+                }
+            }
+        }
 
-        //read del
+        /*
         //read fd
-    
-        */
-        cur_pid = cur_pid->next;
-        //memset(path_buf + 6, '\0', PATH_BUF_SIZE - 6);
-        path_buf[6] = '\0';
-    }
-    /* 
-    printf("cmd\tpid\tuser\tfd\ttype\tnode\tname\n");
-    
-    cur_info = infos;
-    while(cur_info -> name != NULL){
-        printf("%s\t%d\t%s\t%s\t%s\t%ld\t%s\n",cur_info->command,cur_info->pid,cur_info->user,cur_info->fd,cur_info->type,cur_info->nodes,cur_info->name);
-        cur_info = cur_info->next;
-    }
-    */
+        strcpy(path_buff + filename_offset, FD);
+        dp = opendir(path_buff);
+        if(errno != EACCES){
+            while((dir = readdir(dp)) != NULL){
+                stat(dir->d_name, &st);
+                if(st.st_mode & (S_IRUSR | S_IWUSR)){
 
+                }
+            }
+            fp = fopen(path_buff, "r");
+            if(fp != NULL){
+                while(fgets(read_buff, READ_BUFF_SIZE, fp) != NULL){
+                    if(strchr(read_buff, '/') != NULL){
+                        strcpy(read_buff, strchr(read_buff, '/'));
+                        read_buff[strlen(read_buff) - 1] = '\0';
+                        processFile(cur_pid, read_buff, cmd_buff, strstr(read_buff, "(deleted)") ? del : mem);
+                    }
+                }
+            }
+        }
+        */ 
+        cur_pid = cur_pid->next;
+        path_buff[6] = '\0';
+    }
+    
     return 0;
 }
 
-void processFile(pid_node_t *cur_pid, char *path_buf, char *cmd_buff, int fd_t){
+void processFile(pid_node_t *cur_pid, char *path_buff, char *cmd_buff, int fd_t){
 
     static u_int64_t nodes;
-    static char read_buf[READ_BUF_SIZE], name_buff[READ_BUF_SIZE];
-    static char *type_p;
+    static char read_buff[READ_BUFF_SIZE], name_buff[READ_BUFF_SIZE];
+    static char const *type_p;
+    static struct stat st;
     const char *readlink_err = " (readlink: Permission denied)";
     const char *opendir_err = " (opendir: Permission denied)";
-    read_buf[0] = '\0';
+    //read_buff[0] = '\0';
+    memset(read_buff, '\0', READ_BUFF_SIZE);
     name_buff[0] = '\0';
-    readlink(path_buf, read_buf, READ_BUF_SIZE);
-    if(errno == EACCES){
+    
+    //only get real name when read mem
+    if(fd_t ==  mem || fd_t == del){
+        strcpy(read_buff, path_buff);
+    }
+    else{
+        readlink(path_buff, read_buff, READ_BUFF_SIZE);
+    }
 
+    //uknown if can't accest link
+    if((fd_t != mem || fd_t != del) && errno == EACCES){
         type_p = TYPE_STRING[unknown];
         nodes = 0;
-        strcpy(name_buff, path_buf);
+        strcpy(name_buff, path_buff);
         strcat(name_buff, readlink_err);
     }
     else{
-        type_p = TYPE_STRING[reg];
-        nodes = getNodes(read_buf);
-        strcpy(name_buff, read_buf);
+        stat(read_buff, &st);
+        switch(st.st_mode & S_IFMT){
+            case S_IFDIR:
+                type_p = TYPE_STRING[dir];
+                break;
+            case S_IFREG:
+                type_p = TYPE_STRING[reg];
+                break;
+            case S_IFCHR:
+                type_p = TYPE_STRING[chr];
+                break;
+            case S_IFIFO:
+                type_p = TYPE_STRING[fifo];
+                break;
+            case S_IFSOCK:
+                type_p = TYPE_STRING[sock];
+        }
+        nodes = st.st_ino;
+        strcpy(name_buff, read_buff);
     }
+
     printInfo(cmd_buff, cur_pid->pid, cur_pid->username, FD_STRING[fd_t], type_p, nodes, name_buff);
 
 }
 
 void printInfo(char *command, int pid, char *user, const char *fd, const char *type, int nodes, char *name){
-    printf("%-32s%d\t%-24s\t%s\t%s\t%d\t%s\n", command, pid, user, fd, type, nodes, name);
-}
-
-u_int64_t getNodes(char *path){
-    static struct stat st;
-    stat(path, &st);
-    return st.st_ino;
+    printf("%-32s%d\t%-24s\t%s\t%s\t%.0d\t%s\n", command, pid, user, fd, type, nodes, name);
 }
