@@ -72,6 +72,8 @@ int getFiles(pid_node_t *pids, char **args){
 
         //read command and exe
         strcpy(path_buf + filename_offset, FD_STRING[exe]);
+        processFile(path_buf, cmd_buff, exe);
+        /*
         fd_p = FD_STRING[exe];
         read_buf[0] = '\0';
         readlink(path_buf, read_buf, READ_BUF_SIZE);
@@ -87,6 +89,7 @@ int getFiles(pid_node_t *pids, char **args){
             strcpy(name_buff, read_buf);
         }
         printInfo(cmd_buff, pid, user_buff, fd_p, type_p, nodes, name_buff);
+        */
         //nodes = getNodes(read_buf);
         //exe_name = strdup(strrchr(read_buf, '/') + 1);
         
@@ -130,6 +133,26 @@ int getFiles(pid_node_t *pids, char **args){
     */
 
     return 0;
+}
+
+void processFile(char *path_buf, char *cmd_buff, int fd_t){
+
+    static char *read_buf[READ_BUF_SIZE];
+    read_buf[0] = '\0';
+    readlink(path_buf, read_buf, READ_BUF_SIZE);
+    if(errno == EACCES){
+        type_p = TYPE_STRING[unknown];
+        nodes = 0;
+        strcpy(name_buff, path_buf);
+        strcat(name_buff, readlink_err);
+    }
+    else{
+        type_p = TYPE_STRING[reg];
+        nodes = getNodes(read_buf);
+        strcpy(name_buff, read_buf);
+    }
+    printInfo(cmd_buff, pid, user_buff, fd_p, type_p, nodes, name_buff);
+
 }
 
 void printInfo(char *command, int pid, char *user, char *fd, char *type, int nodes, char *name){
