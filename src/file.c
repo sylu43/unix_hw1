@@ -29,13 +29,9 @@ static const char *TYPE_STRING[] = {
 int getFiles(pid_node_t *pids, char **args){
     
     int filename_offset, pid_len;
-    u_int64_t pid, nodes;
     char path_buf[PATH_BUF_SIZE], read_buf[READ_BUF_SIZE];
-    char cmd_buff[READ_BUF_SIZE], user_buff[32], fd_buff[10], name_buff[READ_BUF_SIZE];
-    char *fd_p, *type_p;
+    char cmd_buff[READ_BUF_SIZE], user_buff[32], fd_buff[10];
     const char *status = "status";
-    const char *readlink_err = " (readlink: Permission denied)";
-    const char *opendir_err = " (opendir: Permission denied)";
     FILE *fp;
 
     regex_t re;
@@ -48,9 +44,7 @@ int getFiles(pid_node_t *pids, char **args){
 
     printf("COMMAND\t\t\t\tPID\tUSER\t\t\t\tFD\tTYPE\tNODE\tNAME\n");
     while(cur_pid != NULL){
-        pid = cur_pid->pid;
-        strcpy(user_buff, cur_pid->username);
-        sprintf(path_buf,"%s%ld/", path_buf, pid);
+        sprintf(path_buf,"%s%d/", path_buf, cur_pid->pid);
         filename_offset = strlen(path_buf);
 
         //filter command
@@ -72,7 +66,7 @@ int getFiles(pid_node_t *pids, char **args){
 
         //read command and exe
         strcpy(path_buf + filename_offset, FD_STRING[exe]);
-        processFile(path_buf, cmd_buff, exe);
+        processFile(cur_pid, path_buf, cmd_buff, exe);
         /*
         fd_p = FD_STRING[exe];
         read_buf[0] = '\0';
@@ -135,12 +129,18 @@ int getFiles(pid_node_t *pids, char **args){
     return 0;
 }
 
-void processFile(char *path_buf, char *cmd_buff, int fd_t){
+void processFile(pid_node_t *cur_pid, char *path_buf, char *cmd_buff, int fd_t){
 
-    static char *read_buf[READ_BUF_SIZE];
+    static u_int64_t nodes;
+    static char read_buf[READ_BUF_SIZE], name_buff[READ_BUF_SIZE];
+    static char *type_p;
+    const char *readlink_err = " (readlink: Permission denied)";
+    const char *opendir_err = " (opendir: Permission denied)";
     read_buf[0] = '\0';
+    name_buff[0] = '\0';
     readlink(path_buf, read_buf, READ_BUF_SIZE);
     if(errno == EACCES){
+
         type_p = TYPE_STRING[unknown];
         nodes = 0;
         strcpy(name_buff, path_buf);
@@ -151,11 +151,11 @@ void processFile(char *path_buf, char *cmd_buff, int fd_t){
         nodes = getNodes(read_buf);
         strcpy(name_buff, read_buf);
     }
-    printInfo(cmd_buff, pid, user_buff, fd_p, type_p, nodes, name_buff);
+    printInfo(cmd_buff, cur_pid->pid, cur_pid->username, FD_STRING[fd_t], type_p, nodes, name_buff);
 
 }
 
-void printInfo(char *command, int pid, char *user, char *fd, char *type, int nodes, char *name){
+void printInfo(char *command, int pid, char *user, const char *fd, const char *type, int nodes, char *name){
     printf("%-32s%d\t%-24s\t%s\t%s\t%d\t%s\n", command, pid, user, fd, type, nodes, name);
 }
 
