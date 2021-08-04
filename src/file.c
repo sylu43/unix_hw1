@@ -142,9 +142,9 @@ void processFile(pid_node_t *cur_pid, char *path_buff, char *cmd_buff, int fd_t)
     static char read_buff[READ_BUFF_SIZE], name_buff[READ_BUFF_SIZE];
     static char const *type_p;
     static struct stat st;
-    const char *readlink_err = " (readlink: Permission denied)";
-    const char *opendir_err = " (opendir: Permission denied)";
-    //read_buff[0] = '\0';
+    static const char *readlink_err = " (readlink: Permission denied)";
+    static const char *opendir_err = " (opendir: Permission denied)";
+    static const char *pipe = "pipe";
     memset(read_buff, '\0', READ_BUFF_SIZE);
     name_buff[0] = '\0';
     
@@ -171,21 +171,23 @@ void processFile(pid_node_t *cur_pid, char *path_buff, char *cmd_buff, int fd_t)
     }
     else{
         stat(read_buff, &st);
-        switch(st.st_mode & S_IFMT){
-            case S_IFDIR:
-                type_p = TYPE_STRING[dir];
-                break;
-            case S_IFREG:
-                type_p = TYPE_STRING[reg];
-                break;
-            case S_IFCHR:
-                type_p = TYPE_STRING[chr];
-                break;
-            case S_IFIFO:
-                type_p = TYPE_STRING[fifo];
-                break;
-            case S_IFSOCK:
-                type_p = TYPE_STRING[sock];
+        if(!strncmp(read_buff, pipe, 4)){
+            type_p = TYPE_STRING[fifo];
+        }
+        else{
+            switch(st.st_mode & S_IFMT){
+                case S_IFSOCK:
+                    type_p = TYPE_STRING[sock];
+                case S_IFDIR:
+                    type_p = TYPE_STRING[dir];
+                    break;
+                case S_IFREG:
+                    type_p = TYPE_STRING[reg];
+                    break;
+                case S_IFCHR:
+                    type_p = TYPE_STRING[chr];
+                    break;
+            }
         }
         nodes = st.st_ino;
         strcpy(name_buff, read_buff);
