@@ -41,19 +41,24 @@ int getFiles(pid_node_t *pids, char **args){
     pid_node_t *cur_pid = pids;
 
     //regex setup
-    regex_t re, re2;
+    regex_t command_filter_re, file_filter_re, extract_inode_re;
     regex_t *file_filter;
     regmatch_t match[1];
+    //-c
     if(args[0] != NULL){
-        regcomp(&re, args[0], REG_EXTENDED);
+        regcomp(&command_filter_re, args[0], REG_EXTENDED);
     }
+    //-f
     if(args[2] != NULL){
-        file_filter = &re2;
+        file_filter = &file_filter_re;
         regcomp(file_filter, args[2], REG_EXTENDED);
     }
     else{
         file_filter = NULL;
     }
+    
+    regcomp(&extract_inode_re, "[^[]:\[[0-9]\]", REG_EXTENDED);
+    
 
     //set path_buff to /proc/
     strcpy(path_buff, PROC_DIR);
@@ -68,7 +73,8 @@ int getFiles(pid_node_t *pids, char **args){
         }
     }
 
-    printf("COMMAND\t\t\t\tPID\tUSER\t\t\t\tFD\tTYPE\tNODE\tNAME\n");
+    //printf("%-32s%8d\t%-24s\t%-8s\t%-8s\t%-8.0d\t%-s\n", command, pid, user, fd, type, nodes, name);
+    printf("COMMAND\t\t\t\t\t\t\tPID\t\tUSEt\t\t\t\t\tFD\t\tTYPE\tNODE\t\tNAME\n");
     while(cur_pid != NULL){
         sprintf(path_buff, "%s%d/", path_buff, cur_pid->pid);
         filename_offset = strlen(path_buff);
@@ -82,7 +88,7 @@ int getFiles(pid_node_t *pids, char **args){
         strtok(read_buff, "\t");
         strcpy(cmd_buff, strtok(NULL, "\n"));
         if(args[0] != NULL){
-            if(regexec(&re, cmd_buff, 1, match, 0)){
+            if(regexec(&command_filter_re, cmd_buff, 1, match, 0)){
                 cur_pid = cur_pid->next;
                 path_buff[6] = '\0';
                 continue;
@@ -91,15 +97,15 @@ int getFiles(pid_node_t *pids, char **args){
 
         //read cwd
         strcpy(path_buff + filename_offset, FD_STRING[cwd]);
-        processFile(cur_pid, path_buff, cmd_buff, cwd, type_filter, file_filter);
+        processFile(cur_pid, path_buff, cmd_buff, cwd, type_filter, NULL, file_filter);
 
         //read exe
         strcpy(path_buff + filename_offset, FD_STRING[exe]);
-        processFile(cur_pid, path_buff, cmd_buff, exe, type_filter, file_filter);
+        processFile(cur_pid, path_buff, cmd_buff, exe, type_filter, NULL, file_filter);
         
         //read root
         strcpy(path_buff + filename_offset, FD_STRING[root]);
-        processFile(cur_pid, path_buff, cmd_buff, root, type_filter, file_filter);
+        processFile(cur_pid, path_buff, cmd_buff, root, type_filter, NULL, file_filter);
         
         //read mem
         strcpy(path_buff + filename_offset, "maps");
@@ -109,7 +115,7 @@ int getFiles(pid_node_t *pids, char **args){
                 if(strchr(read_buff, '/') != NULL){
                     strcpy(read_buff, strchr(read_buff, '/'));
                     read_buff[strlen(read_buff) - 1] = '\0';
-                    processFile(cur_pid, read_buff, cmd_buff, strstr(read_buff, "(deleted)") ? del : mem, type_filter, file_filter);
+                    processFile(cur_pid, read_buff, cmd_buff, strstr(read_buff, "(deleted)") ? del : mem, type_filter, NULL, file_filter);
                 }
             }
         }
@@ -137,12 +143,12 @@ int getFiles(pid_node_t *pids, char **args){
                 else if(st.st_mode & S_IWUSR){
                     strcat(fd_buff, "w");
                 }
-                processFile(cur_pid, read_buff, cmd_buff, FD, type_filter, file_filter);
+                processFile(cur_pid, read_buff, cmd_buff, FD, type_filter, &extract_inode_re, file_filter);
             }
         }
         else{
             strcat(path_buff, fd);
-            processFile(cur_pid, path_buff, cmd_buff, nofd, type_filter, file_filter);
+            processFile(cur_pid, path_buff, cmd_buff, nofd, type_filter, NULL,file_filter);
         }
 
         cur_pid = cur_pid->next;
@@ -152,7 +158,7 @@ int getFiles(pid_node_t *pids, char **args){
     return 0;
 }
 
-void processFile(pid_node_t *cur_pid, char *path_buff, char *cmd_buff, int fd_t, int type_filter, regex_t *re){
+void processFile(pid_node_t *cur_pid, char *path_buff, char *cmd_buff, int fd_t, int type_filter, regex_t *i_re, regex_t *f_re){
 
     static u_int64_t nodes;
     static char read_buff[READ_BUFF_SIZE], name_buff[READ_BUFF_SIZE];
@@ -161,6 +167,8 @@ void processFile(pid_node_t *cur_pid, char *path_buff, char *cmd_buff, int fd_t,
     static const char *readlink_err = " (readlink: Permission denied)";
     static const char *opendir_err = " (opendir: Permission denied)";
     static const char *pipe = "pipe";
+    static const char *socket = "socket";
+    static const char *anon_inode = "anon_inode";
 
     //clear buff
     memset(read_buff, '\0', READ_BUFF_SIZE);
@@ -177,7 +185,7 @@ void processFile(pid_node_t *cur_pid, char *path_buff, char *cmd_buff, int fd_t,
         readlink(path_buff, read_buff, READ_BUFF_SIZE);
     }
 
-    //uknown if can't accest link
+    //nofd
     if(fd_t == nofd){
         if(type_filter != 1){
             return;
@@ -187,6 +195,7 @@ void processFile(pid_node_t *cur_pid, char *path_buff, char *cmd_buff, int fd_t,
         strcpy(name_buff, path_buff);
         strcat(name_buff, opendir_err);
     }
+    //can't access link for exe, cwd, root
     else if((fd_t != mem || fd_t != del) && errno == EACCES){
         if(!(type_filter & unknown)){
             return;
@@ -195,49 +204,98 @@ void processFile(pid_node_t *cur_pid, char *path_buff, char *cmd_buff, int fd_t,
         nodes = 0;
         strcpy(name_buff, path_buff);
         strcat(name_buff, readlink_err);
+        nodes = 0;
     }
+    //exe no such file
+    else if((fd_t == exe) && errno == ENOENT){
+        if(!(type_filter & ((1 << reg) | 1 ))){
+            return;
+        }
+        type_p = TYPE_STRING[reg];
+        strcpy(name_buff, path_buff);
+        nodes = 0;
+    }
+    //get access
     else{
+        //get type from name
         stat(read_buff, &st);
         if(!strncmp(read_buff, pipe, 4)){
             if(!(type_filter & ((1 << fifo) | 1 ))){
                 return;
             }
             type_p = TYPE_STRING[fifo];
-        }
-        else{
-            switch(st.st_mode & S_IFMT){
-                case S_IFSOCK:
-                    if(!(type_filter & ((1 << sock) | 1 ))){
-                        return;
-                    }
-                    type_p = TYPE_STRING[sock];
-                    break;
-                case S_IFDIR:
-                    if(!(type_filter & ((1 << dir) | 1 ))){
-                        return;
-                    }
-                    type_p = TYPE_STRING[dir];
-                    break;
-                case S_IFREG:
-                    if(!(type_filter & ((1 << reg) | 1 ))){
-                        return;
-                    }
-                    type_p = TYPE_STRING[reg];
-                    break;
-                case S_IFCHR:
-                    if(!(type_filter & ((1 << chr) | 1 ))){
-                        return;
-                    }
-                    type_p = TYPE_STRING[chr];
-                    break;
+            if(regexec(i_re, read_buff, 1, match, 0)){
+                sscanf(read_buff, "%*[^[][%ld]", &nodes);
             }
         }
-        nodes = st.st_ino;
+        else if(!strncmp(read_buff, socket, 6)){
+            if(!(type_filter & ((1 << sock) | 1 ))){
+                return;
+            }
+            type_p = TYPE_STRING[sock];
+            if(regexec(i_re, read_buff, 1, match, 0)){
+                sscanf(read_buff, "%*[^[][%ld]", &nodes);
+            }
+
+        }
+        else if(read_buff[0] != '/'){
+            if(!(type_filter & 1)){
+                return;
+            }
+            type_p = TYPE_STRING[unknown];
+            nodes = 0;
+            /*
+            if(regexec(i_re, read_buff, 1, match, 0)){
+                printf("???\n");
+                sscanf(read_buff, "%*[^[][%ld]", &nodes);
+            }
+            else{
+                nodes = 0;
+            }
+            */
+        }
+        //get type from st_mode
+        else if(S_ISSOCK(st.st_mode)){
+            if(!(type_filter & ((1 << sock) | 1 ))){
+                return;
+            }
+            type_p = TYPE_STRING[sock];
+            nodes = st.st_ino;
+        }
+        else if(S_ISFIFO(st.st_mode)){
+            if(!(type_filter & ((1 << fifo) | 1 ))){
+                return;
+            }
+            type_p = TYPE_STRING[fifo];
+            nodes = st.st_ino;
+        }
+        else if(S_ISCHR(st.st_mode)){
+            if(!(type_filter & ((1 << chr) | 1 ))){
+                return;
+            }
+            type_p = TYPE_STRING[chr];
+            nodes = st.st_ino;
+        }
+        else if(S_ISDIR(st.st_mode)){
+            if(!(type_filter & ((1 << dir) | 1 ))){
+                return;
+            }
+            type_p = TYPE_STRING[dir];
+            nodes = st.st_ino;
+        }
+        else if(S_ISREG(st.st_mode)){
+            if(!(type_filter & ((1 << reg) | 1 ))){
+                return;
+            }
+            type_p = TYPE_STRING[reg];
+            nodes = st.st_ino;
+        }
         strcpy(name_buff, read_buff);
     }
-    if(re != NULL){
-        if(regexec(re, name_buff, 1, match, 0)){
-            //printf("here\n");
+
+    //filter filename
+    if(f_re != NULL){
+        if(regexec(f_re, name_buff, 1, match, 0)){
             return;
         }
     }
@@ -247,5 +305,5 @@ void processFile(pid_node_t *cur_pid, char *path_buff, char *cmd_buff, int fd_t,
 }
 
 void printInfo(char *command, int pid, char *user, const char *fd, const char *type, int nodes, char *name){
-    printf("%-32s%d\t%-24s\t%s\t%s\t%.0d\t%s\n", command, pid, user, fd, type, nodes, name);
+    printf("%-32s%-8d%-24s%-8s%-8s%-12.0u%-8s\n", command, pid, user, fd, type, nodes, name);
 }
