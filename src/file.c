@@ -73,8 +73,7 @@ int getFiles(pid_node_t *pids, char **args){
         }
     }
 
-    //printf("%-32s%8d\t%-24s\t%-8s\t%-8s\t%-8.0d\t%-s\n", command, pid, user, fd, type, nodes, name);
-    printf("COMMAND\t\t\t\t\t\t\tPID\t\tUSEt\t\t\t\t\tFD\t\tTYPE\tNODE\t\tNAME\n");
+    printf("COMMAND\t\t\t\t\t\t\tPID\t\tUSER\t\t\t\t\tFD\t\tTYPE\tNODE\t\tNAME\n");
     while(cur_pid != NULL){
         sprintf(path_buff, "%s%d/", path_buff, cur_pid->pid);
         filename_offset = strlen(path_buff);
@@ -208,7 +207,7 @@ void processFile(pid_node_t *cur_pid, char *path_buff, char *cmd_buff, int fd_t,
     }
     //exe no such file
     else if((fd_t == exe) && errno == ENOENT){
-        if(!(type_filter & ((1 << reg) | 1 ))){
+        if(!(type_filter & ((1 << (reg + 1)) | 1 ))){
             return;
         }
         type_p = TYPE_STRING[reg];
@@ -220,7 +219,7 @@ void processFile(pid_node_t *cur_pid, char *path_buff, char *cmd_buff, int fd_t,
         //get type from name
         stat(read_buff, &st);
         if(!strncmp(read_buff, pipe, 4)){
-            if(!(type_filter & ((1 << fifo) | 1 ))){
+            if(!(type_filter & ((1 << (fifo + 1)) | 1 ))){
                 return;
             }
             type_p = TYPE_STRING[fifo];
@@ -229,7 +228,7 @@ void processFile(pid_node_t *cur_pid, char *path_buff, char *cmd_buff, int fd_t,
             }
         }
         else if(!strncmp(read_buff, socket, 6)){
-            if(!(type_filter & ((1 << sock) | 1 ))){
+            if(!(type_filter & ((1 << (sock + 1)) | 1 ))){
                 return;
             }
             type_p = TYPE_STRING[sock];
@@ -238,7 +237,7 @@ void processFile(pid_node_t *cur_pid, char *path_buff, char *cmd_buff, int fd_t,
             }
         }
         else if(read_buff[0] != '/'){
-            if(!(type_filter & 1)){
+            if(!(type_filter & ((1 << (unknown + 1)) | 1))){
                 return;
             }
             type_p = TYPE_STRING[unknown];
@@ -247,35 +246,35 @@ void processFile(pid_node_t *cur_pid, char *path_buff, char *cmd_buff, int fd_t,
         }
         //get type from st_mode
         else if(S_ISSOCK(st.st_mode)){
-            if(!(type_filter & ((1 << sock) | 1 ))){
+            if(!(type_filter & ((1 << (sock + 1)) | 1 ))){
                 return;
             }
             type_p = TYPE_STRING[sock];
             nodes = st.st_ino;
         }
         else if(S_ISFIFO(st.st_mode)){
-            if(!(type_filter & ((1 << fifo) | 1 ))){
+            if(!(type_filter & ((1 << (fifo + 1)) | 1 ))){
                 return;
             }
             type_p = TYPE_STRING[fifo];
             nodes = st.st_ino;
         }
         else if(S_ISCHR(st.st_mode)){
-            if(!(type_filter & ((1 << chr) | 1 ))){
+            if(!(type_filter & ((1 << (chr + 1)) | 1 ))){
                 return;
             }
             type_p = TYPE_STRING[chr];
             nodes = st.st_ino;
         }
         else if(S_ISDIR(st.st_mode)){
-            if(!(type_filter & ((1 << dir) | 1 ))){
+            if(!(type_filter & ((1 << (dir + 1)) | 1 ))){
                 return;
             }
             type_p = TYPE_STRING[dir];
             nodes = st.st_ino;
         }
         else if(S_ISREG(st.st_mode)){
-            if(!(type_filter & ((1 << reg) | 1 ))){
+            if(!(type_filter & ((1 << (reg + 1)) | 1 ))){
                 return;
             }
             type_p = TYPE_STRING[reg];
