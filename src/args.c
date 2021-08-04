@@ -4,9 +4,12 @@
 #include <stdio.h>
 #include "args.h"
 
+extern const char *TYPE_STRING[];
+
 int procArgs(int argc, char *argv[], char *args[]){
 
 	int cmd_opt = 0;
+    int i;
 
 	while(1){
 		cmd_opt = getopt(argc, argv, "c:t:f:");
@@ -22,13 +25,19 @@ int procArgs(int argc, char *argv[], char *args[]){
 				args[0] = strdup(optarg);
 				break;
 			case 't':
+                for(i = 0;i < 6;i++){
+                    if(!strcmp(TYPE_STRING[i], optarg)){
+                        break;
+                    }
+                }
+                if(i == 6){
+                    printf("Invalid TYPE option.\n");
+                    return -1;
+                }
 				args[1] = strdup(optarg);
 				break;
 			case 'f':
 				args[2] = strdup(optarg);
-				break;
-			default:
-				printf("no arg\n", optarg);
 				break;
 		}
 	}
