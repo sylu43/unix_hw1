@@ -132,8 +132,8 @@ int getFiles(pid_node_t *pids, char **args){
                 strcat(path_buff, "/");
                 strcpy(path_buff + filename_offset + 3, fd_buff);
                 memset(read_buff, '\0', READ_BUFF_SIZE);
+                stat(path_buff, &st);
                 readlink(path_buff, read_buff, READ_BUFF_SIZE);
-                stat(read_buff, &st);
                 if((st.st_mode & S_IRUSR) && (st.st_mode & S_IWUSR)){
                     strcat(fd_buff, "u");
                 }
@@ -143,7 +143,7 @@ int getFiles(pid_node_t *pids, char **args){
                 else if(st.st_mode & S_IWUSR){
                     strcat(fd_buff, "w");
                 }
-                processFile(cur_pid, read_buff, cmd_buff, FD, type_filter, &extract_inode_re, file_filter);
+                processFile(cur_pid, path_buff, cmd_buff, FD, type_filter, &extract_inode_re, file_filter);
             }
         }
         else{
@@ -178,7 +178,7 @@ void processFile(pid_node_t *cur_pid, char *path_buff, char *cmd_buff, int fd_t,
     static regmatch_t match[1];
 
     //only get real name when read mem
-    if(fd_t ==  mem || fd_t == del || fd_t == FD || fd_t == nofd){
+    if(fd_t ==  mem || fd_t == del || fd_t == nofd){
         strcpy(read_buff, path_buff);
     }
     else{
@@ -236,23 +236,14 @@ void processFile(pid_node_t *cur_pid, char *path_buff, char *cmd_buff, int fd_t,
             if(regexec(i_re, read_buff, 1, match, 0)){
                 sscanf(read_buff, "%*[^[][%ld]", &nodes);
             }
-
         }
         else if(read_buff[0] != '/'){
             if(!(type_filter & 1)){
                 return;
             }
             type_p = TYPE_STRING[unknown];
-            nodes = 0;
-            /*
-            if(regexec(i_re, read_buff, 1, match, 0)){
-                printf("???\n");
-                sscanf(read_buff, "%*[^[][%ld]", &nodes);
-            }
-            else{
-                nodes = 0;
-            }
-            */
+            stat(path_buff, &st);
+            nodes = st.st_ino;
         }
         //get type from st_mode
         else if(S_ISSOCK(st.st_mode)){
